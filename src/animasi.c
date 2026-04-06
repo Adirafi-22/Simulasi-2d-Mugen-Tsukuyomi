@@ -64,7 +64,8 @@ void UpdateAndDrawBintangAwan(int screenWidth, int screenHeight) {
         Color starCol = (Color){255, 255, 255, alpha};
         int sx = (int)(stars[i].x * screenWidth);
         int sy = (int)(stars[i].y * screenHeight);
-        DrawCircle(sx, sy, (int)stars[i].size, starCol);
+        if(g_isWireframe) DrawCircleLines(sx, sy, (float)stars[i].size, starCol);
+        else DrawCircle(sx, sy, (int)stars[i].size, starCol);
     }
 
     Color cloudCol = (Color){80, 70, 100, 100}; 
@@ -79,9 +80,15 @@ void UpdateAndDrawBintangAwan(int screenWidth, int screenHeight) {
         int cx = (int)clouds[i].x;
         int cy = (int)clouds[i].y;
         float s = clouds[i].size;
-        DrawCircle(cx, cy, (int)(30*s), cloudCol);
-        DrawCircle(cx + (int)(30*s), cy - (int)(15*s), (int)(35*s), cloudCol);
-        MidpointEllipseFilled(cx + (int)(60*s), cy, (int)(27*s), (int)(24*s), cloudCol);
+        if(g_isWireframe) {
+            DrawCircleLines(cx, cy, (int)(30*s), cloudCol);
+            DrawCircleLines(cx + (int)(30*s), cy - (int)(15*s), (int)(35*s), cloudCol);
+            MidpointEllipse(cx + (int)(60*s), cy, (int)(27*s), (int)(24*s), cloudCol);
+        } else {
+            DrawCircle(cx, cy, (int)(30*s), cloudCol);
+            DrawCircle(cx + (int)(30*s), cy - (int)(15*s), (int)(35*s), cloudCol);
+            MidpointEllipseFilled(cx + (int)(60*s), cy, (int)(27*s), (int)(24*s), cloudCol);
+        }
     }
 }
 
@@ -96,6 +103,9 @@ void DrawAnimasiScene(int screenWidth, int screenHeight, float elapsedTime, bool
     float hoverY = sinf(elapsedTime * 2.0f) * 15.0f; 
     int madaraX = (int)(screenWidth * (480.0f / 1280.0f));
     DrawMadaraRikudou(madaraX, 240 + (int)hoverY, 0.4f, elapsedTime);
+    
+    // Draw JTK clones next to Madara and a bit lower
+    DrawJTKClones(madaraX + (int)(150 * (screenWidth / 1280.0f)), 300, 0.12f, elapsedTime);
 
     DrawGunungForeground(screenWidth, screenHeight);
 
@@ -154,6 +164,7 @@ void UpdateAndDrawDebu(int screenWidth, int screenHeight) {
         if (dust[i].x < 0) dust[i].x = screenWidth;
 
         dustCol.a = (unsigned char)dust[i].opacity;
-        DrawCircle((int)dust[i].x, (int)dust[i].y, (int)dust[i].size, dustCol);
+        if(g_isWireframe) DrawCircleLines((int)dust[i].x, (int)dust[i].y, dust[i].size, dustCol);
+        else DrawCircle((int)dust[i].x, (int)dust[i].y, (int)dust[i].size, dustCol);
     }
 }

@@ -2,6 +2,21 @@
 #include "algoritma.h"
 #include <math.h>
 
+float g_animSpeed = 1.0f;
+float g_sharinganDir = 1.0f;
+bool g_isWireframe = false;
+float g_accumulatedTime = 0.0f;
+bool g_showJTK = false;
+float g_jtkSmokeTimer = 0.0f;
+
+
+
+// Prototypes for static polygon helper functions
+static void DrawTriBoth(Vector2 a, Vector2 b, Vector2 c, Color color);
+static void FillQuad(int cx, int cy, float scale, float x1, float y1, float x2, float y2, float x3, float y3, float x4, float y4, Color c);
+static void FillTri(int cx, int cy, float scale, float x1, float y1, float x2, float y2, float x3, float y3, Color c);
+static void LineR(int cx, int cy, float scale, float x1, float y1, float x2, float y2, float thick, Color c);
+
 Color LerpColor(Color a, Color b, float t) {
     if (t < 0.0f) t = 0.0f;
     if (t > 1.0f) t = 1.0f;
@@ -13,10 +28,13 @@ Color LerpColor(Color a, Color b, float t) {
     };
 }
 
-// Tomoe Penuh
 static void DrawTomoeFilled(float cx, float cy, float scale, float rotation, Color color) {
     float rBula = 20.0f * scale; // Kepala Tomoe
-    MidcircleFilled((int)cx, (int)cy, (int)rBula, color);
+    if (g_isWireframe) {
+        Midcircle((int)cx, (int)cy, (int)rBula, color);
+    } else {
+        MidcircleFilled((int)cx, (int)cy, (int)rBula, color);
+    }
 
     // Titik kontrol Kurva Bezier
     float px0 = 14 * scale, py0 = 0;
@@ -38,7 +56,11 @@ static void DrawTomoeFilled(float cx, float cy, float scale, float rotation, Col
         
         float stampRadius = (1.0f - t) * (14.0f * scale); 
         if(stampRadius > 0.5f) {
-            MidcircleFilled((int)(cx + tx), (int)(cy + ty), (int)stampRadius, color);
+            if (g_isWireframe) {
+                Midcircle((int)(cx + tx), (int)(cy + ty), (int)stampRadius, color);
+            } else {
+                MidcircleFilled((int)(cx + tx), (int)(cy + ty), (int)stampRadius, color);
+            }
         }
     }
 }
@@ -47,7 +69,27 @@ static RenderTexture2D bgCache = {0};
 static int lastBgWidth = 0;
 static int lastBgHeight = 0;
 
+
+
+static void MyMidcircleFilled(int cx, int cy, int radius, Color color) {
+    if (g_isWireframe) Midcircle(cx, cy, radius, color);
+    else MidcircleFilled(cx, cy, radius, color);
+}
+
+static void MyMidpointEllipseFilled(int cx, int cy, int rx, int ry, Color color) {
+    if (g_isWireframe) MidpointEllipse(cx, cy, rx, ry, color);
+    else MidpointEllipseFilled(cx, cy, rx, ry, color);
+}
+
+static void MyDrawCircle(int cx, int cy, float radius, Color color) {
+    if (g_isWireframe) DrawCircleLines(cx, cy, radius, color);
+    else DrawCircle(cx, cy, radius, color);
+}
+
+
+
 void DrawBackgroundGradient(int width, int height) {
+    
     if (bgCache.id == 0 || lastBgWidth != width || lastBgHeight != height) {
         if (bgCache.id != 0) UnloadRenderTexture(bgCache);
         bgCache = LoadRenderTexture(width, height);
@@ -75,9 +117,10 @@ void DrawBackgroundGradient(int width, int height) {
 // =========================================================
 // BULAN
 // =========================================================
-static RenderTexture2D bulanBiasaCache = {0};
+static RenderTexture2D bulanBiasaCache[2] = {{0}, {0}};
 
 void DrawBulanBiasa(int cx, int cy, int radius, float rotasi, float glowIntensitas, float alphaFading) {
+    int wfIdx = g_isWireframe ? 1 : 0;
     Color blueMoon = (Color){224, 247, 250, 255};
     Color craterCol = (Color){200, 230, 240, 255}; 
     
@@ -85,14 +128,14 @@ void DrawBulanBiasa(int cx, int cy, int radius, float rotasi, float glowIntensit
     int glowRadius = radius + 5 + (int)(glowIntensitas * 15.0f);
     DrawCircleGradient(cx, cy, glowRadius, (Color){150, 200, 255, (unsigned char)(40 * alphaFading)}, BLANK);
 
-    if (bulanBiasaCache.id == 0) {
+    if (bulanBiasaCache[wfIdx].id == 0) {
         int tempRadius = 200;
-        bulanBiasaCache = LoadRenderTexture(tempRadius * 2, tempRadius * 2);
-        BeginTextureMode(bulanBiasaCache);
+        bulanBiasaCache[wfIdx] = LoadRenderTexture(tempRadius * 2, tempRadius * 2);
+        BeginTextureMode(bulanBiasaCache[wfIdx]);
         ClearBackground(BLANK);
         
         int tcx = tempRadius, tcy = tempRadius;
-        MidcircleFilled(tcx, tcy, tempRadius, blueMoon);
+        MyMidcircleFilled(tcx, tcy, tempRadius, blueMoon);
         
         // Kawah TANPA ROTASI saat pembuatan cache
         float factor = 200.0f / 180.0f;
@@ -101,50 +144,51 @@ void DrawBulanBiasa(int cx, int cy, int radius, float rotasi, float glowIntensit
         float c3x = -10 * factor, c3y = 50 * factor;
         float c4x = 50 * factor,  c4y = 40 * factor;
 
-        MidcircleFilled(tcx + (int)c1x, tcy + (int)c1y, (int)(15 * factor), craterCol);
-        MidcircleFilled(tcx + (int)c2x, tcy + (int)c2y, (int)(25 * factor), craterCol);
-        MidcircleFilled(tcx + (int)c3x, tcy + (int)c3y, (int)(20 * factor), craterCol);
-        MidpointEllipseFilled(tcx + (int)c4x, tcy + (int)c4y, (int)(10 * factor), (int)(9 * factor), craterCol);
+        MyMidcircleFilled(tcx + (int)c1x, tcy + (int)c1y, (int)(15 * factor), craterCol);
+        MyMidcircleFilled(tcx + (int)c2x, tcy + (int)c2y, (int)(25 * factor), craterCol);
+        MyMidcircleFilled(tcx + (int)c3x, tcy + (int)c3y, (int)(20 * factor), craterCol);
+        MyMidpointEllipseFilled(tcx + (int)c4x, tcy + (int)c4y, (int)(10 * factor), (int)(9 * factor), craterCol);
         
         EndTextureMode();
     }
     
     // Gambar cache bulan biasa
     float scale = (float)radius / 200.0f;
-    Rectangle source = { 0, 0, (float)bulanBiasaCache.texture.width, -(float)bulanBiasaCache.texture.height };
-    Rectangle dest = { (float)cx, (float)cy, (float)bulanBiasaCache.texture.width * scale, (float)bulanBiasaCache.texture.height * scale };
-    Vector2 origin = { (float)bulanBiasaCache.texture.width * scale / 2.0f, (float)bulanBiasaCache.texture.height * scale / 2.0f };
+    Rectangle source = { 0, 0, (float)bulanBiasaCache[wfIdx].texture.width, -(float)bulanBiasaCache[wfIdx].texture.height };
+    Rectangle dest = { (float)cx, (float)cy, (float)bulanBiasaCache[wfIdx].texture.width * scale, (float)bulanBiasaCache[wfIdx].texture.height * scale };
+    Vector2 origin = { (float)bulanBiasaCache[wfIdx].texture.width * scale / 2.0f, (float)bulanBiasaCache[wfIdx].texture.height * scale / 2.0f };
     
     Color tint = (Color){255, 255, 255, (unsigned char)(255 * alphaFading)};
-    DrawTexturePro(bulanBiasaCache.texture, source, dest, origin, rotasi * RAD2DEG, tint);
+    DrawTexturePro(bulanBiasaCache[wfIdx].texture, source, dest, origin, rotasi * RAD2DEG * g_sharinganDir, tint);
 }
 
 // =========================================================
 // BULAN RINNE SHARINGAN
 // =========================================================
-static RenderTexture2D bulanMerahCache = {0};
+static RenderTexture2D bulanMerahCache[2] = {{0}, {0}};
 
 void DrawBulanMerah(int cx, int cy, int radius, float rotasi, float glowIntensitas, float alphaFading) {
+    int wfIdx = g_isWireframe ? 1 : 0;
     Color redMoon = (Color){183, 0, 0, 255};
     Color blackCol = (Color){0, 0, 0, 255};
 
     int glowRadius = radius + 5 + (int)(glowIntensitas * 15.0f);
     DrawCircleGradient(cx, cy, glowRadius, (Color){255, 0, 0, (unsigned char)(40 * alphaFading)}, BLANK);
 
-    if (bulanMerahCache.id == 0) {
+    if (bulanMerahCache[wfIdx].id == 0) {
         int tempRadius = 200;
-        bulanMerahCache = LoadRenderTexture(tempRadius * 2, tempRadius * 2);
-        BeginTextureMode(bulanMerahCache);
+        bulanMerahCache[wfIdx] = LoadRenderTexture(tempRadius * 2, tempRadius * 2);
+        BeginTextureMode(bulanMerahCache[wfIdx]);
         ClearBackground(BLANK);
         
         int tcx = tempRadius, tcy = tempRadius;
-        DrawCircle(tcx, tcy, tempRadius, redMoon);
+        MyDrawCircle(tcx, tcy, tempRadius, redMoon);
         
         float factor = 200.0f / 180.0f;
         float uniformScale = 0.65f * factor;
 
         // Titik pusat (Pupil) full hitam
-        DrawCircle(tcx, tcy, (int)(25.0f * uniformScale), blackCol);
+        MyDrawCircle(tcx, tcy, (int)(25.0f * uniformScale), blackCol);
 
         int ringRadii[3] = {(int)(tempRadius*0.35f), (int)(tempRadius*0.62f), (int)(tempRadius*0.85f)};
 
@@ -169,22 +213,23 @@ void DrawBulanMerah(int cx, int cy, int radius, float rotasi, float glowIntensit
     Color tint = (Color){255, 255, 255, (unsigned char)(255 * alphaFading)};
     
     float scale = (float)radius / 200.0f;
-    Rectangle source = { 0, 0, (float)bulanMerahCache.texture.width, -(float)bulanMerahCache.texture.height };
-    Rectangle dest = { (float)cx, (float)cy, (float)bulanMerahCache.texture.width * scale, (float)bulanMerahCache.texture.height * scale };
-    Vector2 origin = { (float)bulanMerahCache.texture.width * scale / 2.0f, (float)bulanMerahCache.texture.height * scale / 2.0f };
+    Rectangle source = { 0, 0, (float)bulanMerahCache[wfIdx].texture.width, -(float)bulanMerahCache[wfIdx].texture.height };
+    Rectangle dest = { (float)cx, (float)cy, (float)bulanMerahCache[wfIdx].texture.width * scale, (float)bulanMerahCache[wfIdx].texture.height * scale };
+    Vector2 origin = { (float)bulanMerahCache[wfIdx].texture.width * scale / 2.0f, (float)bulanMerahCache[wfIdx].texture.height * scale / 2.0f };
     
-    DrawTexturePro(bulanMerahCache.texture, source, dest, origin, rotasi * RAD2DEG, tint);
+    DrawTexturePro(bulanMerahCache[wfIdx].texture, source, dest, origin, rotasi * RAD2DEG * g_sharinganDir, tint);
 }
 
 // =========================================================
 // POHON SHINJU
 // =========================================================
-static RenderTexture2D pohonCache = {0};
+static RenderTexture2D pohonCache[2] = {{0}, {0}};
 
 void DrawPohonShinju(int baseX, int baseY, float scale) {
-    if (pohonCache.id == 0) {
-        pohonCache = LoadRenderTexture(1000, 900);
-        BeginTextureMode(pohonCache);
+    int wfIdx = g_isWireframe ? 1 : 0;
+    if (pohonCache[wfIdx].id == 0) {
+        pohonCache[wfIdx] = LoadRenderTexture(1000, 900);
+        BeginTextureMode(pohonCache[wfIdx]);
         ClearBackground(BLANK);
         
         int tempBaseX = 500;
@@ -209,7 +254,9 @@ void DrawPohonShinju(int baseX, int baseY, float scale) {
             float t_root = (float)(rootHeights[r]) / height; 
             int startW = bottomWidth - (int)(t_root * (bottomWidth - topWidth));
 
-            for (int w = 0; w < rootThick[r] * tempScale; w++) {
+            int maxW = rootThick[r] * tempScale;
+            for (int w = 0; w < maxW; w++) {
+                if (g_isWireframe && w > 0 && w < maxW - 1) continue;
                 int endOffsetY = w / 2; 
 
                 // Akar Kiri
@@ -225,66 +272,94 @@ void DrawPohonShinju(int baseX, int baseY, float scale) {
             }
         }
 
-        // Batang
-        for (int y = 0; y <= height; y++) {
-            float t = (float)y / height;
-            int currentWidth = bottomWidth - (int)(t * (bottomWidth - topWidth));
-            DrawLine(tempBaseX - currentWidth, tempBaseY - y, tempBaseX + currentWidth, tempBaseY - y, midWood); 
-        }
-        for (int y = 0; y <= height; y++) {
-            float t = (float)y / height;
-            int currentWidth = bottomWidth - (int)(t * (bottomWidth - topWidth));
-            DrawLine(tempBaseX - currentWidth, tempBaseY - y, tempBaseX - (int)(currentWidth * 0.7f), tempBaseY - y, darkWood);
-            DrawLine(tempBaseX + (int)(currentWidth * 0.7f), tempBaseY - y, tempBaseX + currentWidth, tempBaseY - y, darkWood);
+        if (!g_isWireframe) {
+            // Batang
+            for (int y = 0; y <= height; y++) {
+                float t = (float)y / height;
+                int currentWidth = bottomWidth - (int)(t * (bottomWidth - topWidth));
+                DrawLine(tempBaseX - currentWidth, tempBaseY - y, tempBaseX + currentWidth, tempBaseY - y, midWood); 
+            }
+            for (int y = 0; y <= height; y++) {
+                float t = (float)y / height;
+                int currentWidth = bottomWidth - (int)(t * (bottomWidth - topWidth));
+                DrawLine(tempBaseX - currentWidth, tempBaseY - y, tempBaseX - (int)(currentWidth * 0.7f), tempBaseY - y, darkWood);
+                DrawLine(tempBaseX + (int)(currentWidth * 0.7f), tempBaseY - y, tempBaseX + currentWidth, tempBaseY - y, darkWood);
+            }
+        } else {
+            // Outline batang
+            DrawLine(tempBaseX - bottomWidth, tempBaseY, tempBaseX - topWidth, topY, midWood);
+            DrawLine(tempBaseX + bottomWidth, tempBaseY, tempBaseX + topWidth, topY, midWood);
+            DrawLine(tempBaseX - bottomWidth, tempBaseY, tempBaseX + bottomWidth, tempBaseY, midWood);
+            DrawLine(tempBaseX - topWidth, topY, tempBaseX + topWidth, topY, midWood);
         }
 
 
-        // Tekstur Serat Melilit
-        for (int i = -1; i <= 1; i++) {
-            int offsetX = i * (bottomWidth/2);
-            DrawBezierCubic(tempBaseX + offsetX, tempBaseY,
-                            tempBaseX - (int)(60*tempScale) + offsetX, tempBaseY - (int)(200*tempScale),
-                            tempBaseX + (int)(60*tempScale) + offsetX, tempBaseY - (int)(400*tempScale),
-                            tempBaseX, topY, darkWood);
-                            
-            DrawBezierCubic(tempBaseX - offsetX, tempBaseY,
-                            tempBaseX + (int)(60*tempScale) - offsetX, tempBaseY - (int)(200*tempScale),
-                            tempBaseX - (int)(60*tempScale) - offsetX, tempBaseY - (int)(400*tempScale),
-                            tempBaseX, topY, darkWood);
+        // Tekstur Serat Melilit (hide mostly if wireframe for cleaner look, or just keep them)
+        if (!g_isWireframe) {
+            for (int i = -1; i <= 1; i++) {
+                int offsetX = i * (bottomWidth/2);
+                DrawBezierCubic(tempBaseX + offsetX, tempBaseY,
+                                tempBaseX - (int)(60*tempScale) + offsetX, tempBaseY - (int)(200*tempScale),
+                                tempBaseX + (int)(60*tempScale) + offsetX, tempBaseY - (int)(400*tempScale),
+                                tempBaseX, topY, darkWood);
+                                
+                DrawBezierCubic(tempBaseX - offsetX, tempBaseY,
+                                tempBaseX + (int)(60*tempScale) - offsetX, tempBaseY - (int)(200*tempScale),
+                                tempBaseX - (int)(60*tempScale) - offsetX, tempBaseY - (int)(400*tempScale),
+                                tempBaseX, topY, darkWood);
+            }
         }
 
         // Mahkota Tajam (Bunga)
-        Color spikeCol = (Color){45, 35, 33, 255};
-        Bres_ThickLine(tempBaseX, topY, tempBaseX, topY - (int)(80*tempScale), 12, spikeCol); // Pucuk Tengah
-        Bres_ThickLine(tempBaseX, topY, tempBaseX - (int)(50*tempScale), topY - (int)(60*tempScale), 10, spikeCol); // Kiri Dalam
-        Bres_ThickLine(tempBaseX, topY, tempBaseX + (int)(50*tempScale), topY - (int)(60*tempScale), 10, spikeCol); // Kanan Dalam
-        Bres_ThickLine(tempBaseX, topY + (int)(15*tempScale), tempBaseX - (int)(70*tempScale), topY - (int)(20*tempScale), 8, spikeCol); // Kiri Luar
-        Bres_ThickLine(tempBaseX, topY + (int)(15*tempScale), tempBaseX + (int)(70*tempScale), topY - (int)(20*tempScale), 8, spikeCol); // Kanan Luar
+        if(g_isWireframe) {
+            Color spikeCol = (Color){45, 35, 33, 255};
+            DrawLine(tempBaseX, topY, tempBaseX, topY - (int)(80*tempScale), spikeCol);
+            DrawLine(tempBaseX, topY, tempBaseX - (int)(50*tempScale), topY - (int)(60*tempScale), spikeCol);
+            DrawLine(tempBaseX, topY, tempBaseX + (int)(50*tempScale), topY - (int)(60*tempScale), spikeCol);
+            DrawLine(tempBaseX, topY + (int)(15*tempScale), tempBaseX - (int)(70*tempScale), topY - (int)(20*tempScale), spikeCol);
+            DrawLine(tempBaseX, topY + (int)(15*tempScale), tempBaseX + (int)(70*tempScale), topY - (int)(20*tempScale), spikeCol);
+        } else {
+            Color spikeCol = (Color){45, 35, 33, 255};
+            Bres_ThickLine(tempBaseX, topY, tempBaseX, topY - (int)(80*tempScale), 12, spikeCol); // Pucuk Tengah
+            Bres_ThickLine(tempBaseX, topY, tempBaseX - (int)(50*tempScale), topY - (int)(60*tempScale), 10, spikeCol); // Kiri Dalam
+            Bres_ThickLine(tempBaseX, topY, tempBaseX + (int)(50*tempScale), topY - (int)(60*tempScale), 10, spikeCol); // Kanan Dalam
+            Bres_ThickLine(tempBaseX, topY + (int)(15*tempScale), tempBaseX - (int)(70*tempScale), topY - (int)(20*tempScale), 8, spikeCol); // Kiri Luar
+            Bres_ThickLine(tempBaseX, topY + (int)(15*tempScale), tempBaseX + (int)(70*tempScale), topY - (int)(20*tempScale), 8, spikeCol); // Kanan Luar
+        }
         
         EndTextureMode();
     }
     
-    Rectangle source = { 0, 0, (float)pohonCache.texture.width, -(float)pohonCache.texture.height };
-    Rectangle dest = { (float)baseX, (float)baseY, (float)pohonCache.texture.width * scale, (float)pohonCache.texture.height * scale };
+    Rectangle source = { 0, 0, (float)pohonCache[wfIdx].texture.width, -(float)pohonCache[wfIdx].texture.height };
+    Rectangle dest = { (float)baseX, (float)baseY, (float)pohonCache[wfIdx].texture.width * scale, (float)pohonCache[wfIdx].texture.height * scale };
     Vector2 origin = { 500.0f * scale, 800.0f * scale };
     
-    DrawTexturePro(pohonCache.texture, source, dest, origin, 0.0f, WHITE);
+    DrawTexturePro(pohonCache[wfIdx].texture, source, dest, origin, 0.0f, WHITE);
 }
 
 // =========================================================
 // GUNUNG
 // =========================================================
-static RenderTexture2D gunungCache = {0};
+static RenderTexture2D gunungCache[2] = {{0}, {0}};
 static int lastGunungWidth = 0;
 static int lastGunungHeight = 0;
 
 void DrawGunungForeground(int screenWidth, int screenHeight) {
-    if (gunungCache.id == 0 || lastGunungWidth != screenWidth || lastGunungHeight != screenHeight) {
-        if (gunungCache.id != 0) UnloadRenderTexture(gunungCache);
-        gunungCache = LoadRenderTexture(screenWidth, screenHeight);
-        BeginTextureMode(gunungCache);
-        ClearBackground(BLANK); // Transparan agar bisa di-layer
+    int wfIdx = g_isWireframe ? 1 : 0;
+    
+    if (gunungCache[0].id == 0 || gunungCache[1].id == 0 || lastGunungWidth != screenWidth || lastGunungHeight != screenHeight) {
+        if (gunungCache[0].id != 0) UnloadRenderTexture(gunungCache[0]);
+        if (gunungCache[1].id != 0) UnloadRenderTexture(gunungCache[1]);
         
+        gunungCache[0] = LoadRenderTexture(screenWidth, screenHeight);
+        gunungCache[1] = LoadRenderTexture(screenWidth, screenHeight);
+        
+        lastGunungWidth = screenWidth;
+        lastGunungHeight = screenHeight;
+        
+        // Solid Draw
+        BeginTextureMode(gunungCache[0]);
+        ClearBackground(BLANK); // Transparan agar bisa di-layer
         Color mountainCol = (Color){15, 20, 40, 255}; // Navy Gelap Estetik
         int baseY = screenHeight;
 
@@ -310,19 +385,30 @@ void DrawGunungForeground(int screenWidth, int screenHeight) {
             int x1 = peaksX[i], y1 = peaksY[i];
             int x2 = peaksX[i+1], y2 = peaksY[i+1];
             
-            for(int x = x1; x <= x2; x++) {
-                float t = (float)(x - x1) / (x2 - x1);
-                int y = y1 + (int)(t * (y2 - y1)); 
-                DrawLine(x, y, x, screenHeight, mountainCol); // Changed from BresenhamLine
-            }
-            DrawLineEx((Vector2){(float)x1, (float)y1}, (Vector2){(float)x2, (float)y2}, 3, BLACK); // Changed from Bres_ThickLine
+            Vector2 v1 = {(float)x1, (float)y1};
+            Vector2 v2 = {(float)x2, (float)y2};
+            Vector2 v3 = {(float)x1, (float)screenHeight};
+            Vector2 v4 = {(float)x2, (float)screenHeight};
+            DrawTriangle(v1, v3, v4, mountainCol);
+            DrawTriangle(v4, v3, v1, mountainCol);
+            DrawTriangle(v1, v4, v2, mountainCol);
+            DrawTriangle(v2, v4, v1, mountainCol);
+            DrawLineEx((Vector2){(float)x1, (float)y1}, (Vector2){(float)x2, (float)y2}, 3, BLACK); 
         }
         EndTextureMode();
-        lastGunungWidth = screenWidth;
-        lastGunungHeight = screenHeight;
+        
+        // Wireframe Draw
+        BeginTextureMode(gunungCache[1]);
+        ClearBackground(BLANK);
+        for (int i = 0; i < 7; i++) {
+            int x1 = peaksX[i], y1 = peaksY[i];
+            int x2 = peaksX[i+1], y2 = peaksY[i+1];
+            DrawLineEx((Vector2){(float)x1, (float)y1}, (Vector2){(float)x2, (float)y2}, 3, WHITE); 
+        }
+        EndTextureMode();
     }
     
-    DrawTextureRec(gunungCache.texture, (Rectangle){ 0, 0, (float)screenWidth, -(float)screenHeight }, (Vector2){ 0, 0 }, WHITE);
+    DrawTextureRec(gunungCache[wfIdx].texture, (Rectangle){ 0, 0, (float)screenWidth, -(float)screenHeight }, (Vector2){ 0, 0 }, WHITE);
 }
 
 // =========================================================
@@ -358,6 +444,8 @@ void DrawBulanAnimasi(int cx, int cy, int radius, float elapsedTime) {
     }
 }
 
+
+
 // =========================================================
 // UCHIHA MADARA RIKUDOU MODE
 // =========================================================
@@ -369,7 +457,7 @@ void DrawMadaraRikudou(int cx, int cy, float scale, float elapsedTime) {
         int gx = cx + (int)(cosf(angle) * radiusMelingkar);
         int gy = cy + (int)(sinf(angle) * radiusMelingkar * 0.7f); 
         
-        DrawCircle(gx, gy, (int)(7 * scale), BLACK);
+        MyDrawCircle(gx, gy, (int)(7 * scale), BLACK);
         DrawCircleLines(gx, gy, (int)(7 * scale), LIGHTGRAY); 
     }
 
@@ -378,7 +466,8 @@ void DrawMadaraRikudou(int cx, int cy, float scale, float elapsedTime) {
     int maxGlow = (int)(120 * scale);
     for (int r = (int)(40 * scale); r < maxGlow; r += 6) {
         int alpha = (int)(60 * pulse * (1.0f - (float)(r - 40*scale)/(maxGlow - 40*scale)));
-        DrawCircle(cx, cy, r, (Color){255, 255, 255, (unsigned char)alpha});
+        if(g_isWireframe) DrawCircleLines(cx, cy, r, (Color){255, 255, 255, (unsigned char)alpha});
+        else DrawCircle(cx, cy, r, (Color){255, 255, 255, (unsigned char)alpha});
     }
 
     // Tongkat Shakujo Hitam (Dipegang di sebelah kanan)
@@ -401,8 +490,8 @@ void DrawMadaraRikudou(int cx, int cy, float scale, float elapsedTime) {
     Vector2 v2 = { cx + 25*scale, cy - 10*scale }; 
     Vector2 v3 = { cx + 50*scale, cy + 70*scale }; 
     Vector2 v4 = { cx - 40*scale, cy + 80*scale }; 
-    DrawTriangle(v1, v4, v3, cloakCol);
-    DrawTriangle(v1, v3, v2, cloakCol);
+    DrawTriBoth(v1, v4, v3, cloakCol);
+    DrawTriBoth(v1, v3, v2, cloakCol);
     // Tangan
     DrawLineEx((Vector2){cx + 15*scale, cy}, (Vector2){cx + 40*scale, cy + 15*scale}, 18*scale, cloakCol);
 
@@ -411,24 +500,28 @@ void DrawMadaraRikudou(int cx, int cy, float scale, float elapsedTime) {
         for (int j = 0; j < 3; j++) {
             int px = cx - 12*scale + (j * 12 * scale);
             int py = cy + 10*scale + (i * 15 * scale);
-            DrawCircle(px, py, 2.5f*scale, BLACK);
+            MyDrawCircle(px, py, 2.5f*scale, BLACK);
         }
     }
 
     Color hairCol = (Color){210, 210, 225, 255};
-    DrawTriangle((Vector2){cx - 15*scale, cy - 30*scale}, (Vector2){cx - 45*scale, cy + 40*scale}, (Vector2){cx + 10*scale, cy - 10*scale}, hairCol);
-    DrawTriangle((Vector2){cx + 10*scale, cy - 30*scale}, (Vector2){cx - 15*scale, cy - 10*scale}, (Vector2){cx + 35*scale, cy + 30*scale}, hairCol);
-    DrawTriangle((Vector2){cx - 10*scale, cy - 40*scale}, (Vector2){cx - 55*scale, cy + 10*scale}, (Vector2){cx + 5*scale, cy - 10*scale}, hairCol);
-    DrawCircle(cx - 5*scale, cy - 25*scale, 14*scale, (Color){180, 180, 190, 255});
-    DrawTriangle((Vector2){cx - 12*scale, cy - 35*scale}, (Vector2){cx - 16*scale, cy - 48*scale}, (Vector2){cx - 8*scale, cy - 35*scale}, cloakCol);
+    DrawTriBoth((Vector2){cx - 15*scale, cy - 30*scale}, (Vector2){cx - 45*scale, cy + 40*scale}, (Vector2){cx + 10*scale, cy - 10*scale}, hairCol);
+    DrawTriBoth((Vector2){cx + 10*scale, cy - 30*scale}, (Vector2){cx - 15*scale, cy - 10*scale}, (Vector2){cx + 35*scale, cy + 30*scale}, hairCol);
+    DrawTriBoth((Vector2){cx - 10*scale, cy - 40*scale}, (Vector2){cx - 55*scale, cy + 10*scale}, (Vector2){cx + 5*scale, cy - 10*scale}, hairCol);
+    MyDrawCircle(cx - 5*scale, cy - 25*scale, 14*scale, (Color){180, 180, 190, 255});
+    DrawTriBoth((Vector2){cx - 12*scale, cy - 35*scale}, (Vector2){cx - 16*scale, cy - 48*scale}, (Vector2){cx - 8*scale, cy - 35*scale}, cloakCol);
 }
 
 // =========================================================
 // Poligon
 // =========================================================
 static void DrawTriBoth(Vector2 a, Vector2 b, Vector2 c, Color color) {
-    DrawTriangle(a, b, c, color);
-    DrawTriangle(a, c, b, color);
+    if (g_isWireframe) {
+        DrawTriangleLines(a, b, c, color);
+    } else {
+        DrawTriangle(a, b, c, color);
+        DrawTriangle(a, c, b, color);
+    }
 }
 
 static void FillQuad(int cx, int cy, float scale, float x1, float y1, float x2, float y2, float x3, float y3, float x4, float y4, Color c) {
@@ -455,10 +548,9 @@ static void LineR(int cx, int cy, float scale, float x1, float y1, float x2, flo
 // NARUTO KURAMA MODE
 // =========================================================
 void DrawNarutoKurama(int cx, int cy, float scale, float elapsedTime) {
-    // Double-sine wave interpolation untuk levitasi organik (dinaikkan amplitudonya agar semulus Madara)
-    float wave1 = sinf(elapsedTime * 1.8f) * 15.0f;
-    float wave2 = sinf(elapsedTime * 3.2f) * 5.0f;
-    cy = cy + (int)(wave1 + wave2);
+    // Sine wave interpolation untuk levitasi organik yang smooth (sama seperti Madara)
+    float hoverY = sinf(elapsedTime * 2.0f + 0.5f) * 15.0f;
+    cy = cy + (int)roundf(hoverY);
 
     Color bodyCol = GetColor(0xffeb99ff);
     Color outlineCol = GetColor(0xff6600ff);
@@ -468,7 +560,8 @@ void DrawNarutoKurama(int cx, int cy, float scale, float elapsedTime) {
     // Aura
     for (int r = (int)(90*scale); r > (int)(40*scale); r -= 10) {
         float alpha = (float)(r - 40*scale) / (50*scale);
-        DrawCircle(cx, cy - 50*scale, r, Fade(outlineCol, (1.0f - alpha)*0.5f));
+        if(g_isWireframe) DrawCircleLines(cx, cy - 50*scale, r, Fade(outlineCol, (1.0f - alpha)*0.5f));
+        else DrawCircle(cx, cy - 50*scale, r, Fade(outlineCol, (1.0f - alpha)*0.5f));
     }
 
     // Ekor
@@ -479,14 +572,14 @@ void DrawNarutoKurama(int cx, int cy, float scale, float elapsedTime) {
             float py = -20.0f - (t * 120.0f);
             float rx = 0, ry = py; RotatePoint(&rx, &ry, 0, 0, angle);
             float radius = sinf(t * PI) * 22.0f * scale;
-            if(radius > 1.0f) DrawCircle((int)(cx + rx*scale), (int)(cy + ry*scale), radius + 3*scale, outlineCol);
+            if(radius > 1.0f) MyDrawCircle((int)(cx + rx*scale), (int)(cy + ry*scale), radius + 3*scale, outlineCol);
         }
         // Bagian Dalam
         for (float t = 0; t <= 1.0f; t += 0.05f) {
             float py = -20.0f - (t * 120.0f);
             float rx = 0, ry = py; RotatePoint(&rx, &ry, 0, 0, angle);
             float radius = sinf(t * PI) * 22.0f * scale;
-            if(radius > 1.0f) DrawCircle((int)(cx + rx*scale), (int)(cy + ry*scale), radius, tailCol);
+            if(radius > 1.0f) MyDrawCircle((int)(cx + rx*scale), (int)(cy + ry*scale), radius, tailCol);
         }
         // Garis Titik Hitam
         for (float t = 0; t <= 1.0f; t += 0.08f) {
@@ -494,7 +587,7 @@ void DrawNarutoKurama(int cx, int cy, float scale, float elapsedTime) {
             float px = u*u*0 + 2*u*t*5 + t*t*0; 
             float py = u*u*(-30) + 2*u*t*(-80) + t*t*(-130);
             float rx = px, ry = py; RotatePoint(&rx, &ry, 0, 0, angle);
-            DrawCircle((int)(cx + rx*scale), (int)(cy + ry*scale), 2.0f * scale, markCol);
+            MyDrawCircle((int)(cx + rx*scale), (int)(cy + ry*scale), 2.0f * scale, markCol);
         }
     }
 
@@ -533,14 +626,14 @@ void DrawNarutoKurama(int cx, int cy, float scale, float elapsedTime) {
     int jX[] = {-20, 20, -12, 12};
     int jY[] = {-40, -40, -10, -10};
     for(int i=0; i<4; i++) {
-        DrawCircle(cx+jX[i]*scale, cy+jY[i]*scale, 6*scale, outlineCol);
-        DrawCircle(cx+jX[i]*scale, cy+jY[i]*scale, 5*scale, bodyCol);
-        DrawCircle(cx+jX[i]*scale, cy+jY[i]*scale, 2*scale, markCol);
+        MyDrawCircle(cx+jX[i]*scale, cy+jY[i]*scale, 6*scale, outlineCol);
+        MyDrawCircle(cx+jX[i]*scale, cy+jY[i]*scale, 5*scale, bodyCol);
+        MyDrawCircle(cx+jX[i]*scale, cy+jY[i]*scale, 2*scale, markCol);
     }
 
     // Perut
     DrawCircleLines(cx, cy - 25*scale, 10*scale, markCol);
-    DrawCircle(cx, cy - 25*scale, 4*scale, markCol);
+    MyDrawCircle(cx, cy - 25*scale, 4*scale, markCol);
     LineR(cx,cy,scale,-16,-36,-6,-30,2,markCol);
     LineR(cx,cy,scale,16,-36,6,-30,2,markCol);
     LineR(cx,cy,scale,-10,-14,-4,-20,2,markCol);
@@ -566,18 +659,22 @@ void DrawNarutoKurama(int cx, int cy, float scale, float elapsedTime) {
     LineR(cx,cy,scale,24,-60,14,-58,2,markCol);
 
     // Mata
-    DrawEllipse(cx-8*scale, cy-68*scale, 4*scale, 2*scale, RED);
-    DrawEllipse(cx+8*scale, cy-68*scale, 4*scale, 2*scale, RED);
+    if(g_isWireframe) {
+        DrawEllipseLines(cx-8*scale, cy-68*scale, 4*scale, 2*scale, RED);
+        DrawEllipseLines(cx+8*scale, cy-68*scale, 4*scale, 2*scale, RED);
+    } else {
+        DrawEllipse(cx-8*scale, cy-68*scale, 4*scale, 2*scale, RED);
+        DrawEllipse(cx+8*scale, cy-68*scale, 4*scale, 2*scale, RED);
+    }
 }
 
 // =========================================================
 // SASUKE PERFECT SUSANOO
 // =========================================================
 void DrawSasukeSusanoo(int cx, int cy, float scale, float elapsedTime) {
-    // Double-sine wave interpolation untuk levitasi organik (dinaikkan amplitudonya agar semulus Madara)
-    float wave1 = sinf(elapsedTime * 1.6f + 1.0f) * 15.0f;
-    float wave2 = sinf(elapsedTime * 2.9f + 0.5f) * 5.0f;
-    cy = cy + (int)(wave1 + wave2);
+    // Sine wave interpolation dengan offset fasa agar gerakannya organik dan smooth
+    float hoverY = sinf(elapsedTime * 1.8f + 1.5f) * 15.0f;
+    cy = cy + (int)roundf(hoverY);
 
     Color bPurp = GetColor(0x9b59b6ff);
     Color dPurp = GetColor(0x5b2c6fff);
@@ -587,7 +684,8 @@ void DrawSasukeSusanoo(int cx, int cy, float scale, float elapsedTime) {
     // Aura
     for (int r = (int)(90*scale); r > (int)(40*scale); r -= 10) {
         float alpha = (float)(r - 40*scale) / (50*scale);
-        DrawCircle(cx, cy - 40*scale, r, Fade(bPurp, (1.0f - alpha)*0.5f));
+        if(g_isWireframe) DrawCircleLines(cx, cy - 40*scale, r, Fade(bPurp, (1.0f - alpha)*0.5f));
+        else DrawCircle(cx, cy - 40*scale, r, Fade(bPurp, (1.0f - alpha)*0.5f));
     }
 
     // Sayap
@@ -672,7 +770,8 @@ void DrawSasukeSusanoo(int cx, int cy, float scale, float elapsedTime) {
     // Rok
     FillQuad(cx,cy,scale,-25,-10,25,-10,35,25,-35,25,bPurp);
     for(int i=-25; i<=25; i+=10) LineR(cx,cy,scale,i,-10,i*1.3f,25,2,oPurp);
-    DrawRectangle((int)(cx-22*scale), (int)(cy-15*scale), (int)(44*scale), (int)(10*scale), dPurp);
+    if(g_isWireframe) DrawRectangleLines((int)(cx-22*scale), (int)(cy-15*scale), (int)(44*scale), (int)(10*scale), dPurp);
+    else DrawRectangle((int)(cx-22*scale), (int)(cy-15*scale), (int)(44*scale), (int)(10*scale), dPurp);
 
     // Badan
     FillQuad(cx,cy,scale,-25,-45,25,-45,20,-15,-20,-15,bPurp);
@@ -710,11 +809,108 @@ void DrawSasukeSusanoo(int cx, int cy, float scale, float elapsedTime) {
     FillTri(cx,cy,scale,20,-65,35,-85,10,-65, lPurp); // Tanduk Kanan
 
     // Mata
-    DrawEllipse(cx-8*scale, cy-55*scale, 5*scale, 2*scale, YELLOW);
-    DrawEllipse(cx+8*scale, cy-55*scale, 5*scale, 2*scale, YELLOW);
+    if(g_isWireframe) {
+        DrawEllipseLines(cx-8*scale, cy-55*scale, 5*scale, 2*scale, YELLOW);
+        DrawEllipseLines(cx+8*scale, cy-55*scale, 5*scale, 2*scale, YELLOW);
+    } else {
+        DrawEllipse(cx-8*scale, cy-55*scale, 5*scale, 2*scale, YELLOW);
+        DrawEllipse(cx+8*scale, cy-55*scale, 5*scale, 2*scale, YELLOW);
+    }
 
     // Sword
     LineR(cx,cy,scale,35,10,120,80,5,lPurp);
     LineR(cx,cy,scale,35,10,120,80,2,WHITE);
     LineR(cx,cy,scale,25,0,45,-20,4,dPurp);
 }
+
+// =========================================================
+// KAGEBUNSHIN JTK
+// =========================================================
+void DrawJTKClones(int startX, int startY, float scale, float elapsedTime) {
+    if (!g_showJTK && g_jtkSmokeTimer <= 0.0f) return;
+    
+    // Grid Setup (Diperbesar gap dan skalanya agar terbaca jelas)
+    int gapX = (int)(320 * scale);
+    int gapY = (int)(380 * scale);
+    
+    typedef struct { int x, y, type; } CloneNode; // type: 1 = Naruto, 2 = Sasuke
+    
+    CloneNode nodes[] = {
+        // Huruf J (Naruto) / StartOffset: 0
+        {0,0,1}, {1,0,1}, {2,0,1},
+                 {1,1,1},
+                 {1,2,1},
+        {0,3,1}, {1,3,1},
+        
+        // Huruf T (T-Bar Naruto, Stem Sasuke) / StartOffset: 4
+        {4,0,1}, {5,0,1}, {6,0,1},
+                 {5,1,2},
+                 {5,2,2},
+                 {5,3,2},
+                          
+        // Huruf K (Sasuke) / StartOffset: 8
+        {8,0,2},          {10,0,2},
+        {8,1,2}, {9,1,2},
+        {8,2,2},          {10,2,2},
+        {8,3,2},          {10,3,2}
+    };
+    
+    int numNodes = sizeof(nodes) / sizeof(nodes[0]);
+    float smokeRadius = 0.0f;
+    bool shouldDrawClones = false;
+    
+    // Smoke animation parameters
+    if (g_jtkSmokeTimer > 0.0f) {
+        float smokeProgress = 1.0f - g_jtkSmokeTimer; // 0.0 -> 1.0
+        smokeRadius = smokeProgress * 180.0f * scale; // Lebih besar asapnya
+        if (smokeProgress >= 0.5f) {
+            shouldDrawClones = g_showJTK;
+        } else {
+            shouldDrawClones = !g_showJTK;
+        }
+    } else {
+        if (!g_showJTK) return;
+        shouldDrawClones = true;
+    }
+    
+    if (shouldDrawClones) {
+        for (int i = 0; i < numNodes; i++) {
+            int cx = startX + nodes[i].x * gapX;
+            int cy = startY + nodes[i].y * gapY;
+            
+            if (nodes[i].type == 1) DrawNarutoKurama(cx, cy, scale, elapsedTime);
+            if (nodes[i].type == 2) DrawSasukeSusanoo(cx, cy, scale, elapsedTime);
+        }
+    }
+    
+    // Draw Smoke (Hanya 3 pusat untuk J, T, K agar MENCEGAH LAG OVERDRAW!)
+    if (g_jtkSmokeTimer > 0.0f) {
+        float smokeProgress = 1.0f - g_jtkSmokeTimer;
+        int smokeOpacity = (int)(255 * (1.0f - smokeProgress));
+        if (smokeOpacity > 255) smokeOpacity = 255;
+        if (smokeOpacity < 0) smokeOpacity = 0;
+        
+        Color smokeColors[] = {
+            (Color){200, 200, 200, smokeOpacity},
+            (Color){150, 150, 150, smokeOpacity},
+            (Color){100, 100, 100, (int)(smokeOpacity * 0.8f)}
+        };
+        
+        int centerPointsX[] = { startX + 1 * gapX, startX + 5 * gapX, startX + 9 * gapX }; // Pusat J, T, K
+        int centerY = startY + 1 * gapY;
+        
+        for(int p = 0; p < 3; p++) {
+            int cx = centerPointsX[p];
+            int cy = centerY;
+            if (!g_isWireframe) {
+                DrawCircle(cx, cy, smokeRadius * 2.5f, smokeColors[2]);
+                DrawCircle(cx - (int)(30*scale), cy - (int)(20*scale), smokeRadius * 2.0f, smokeColors[1]);
+                DrawCircle(cx + (int)(20*scale), cy + (int)(20*scale), smokeRadius * 1.5f, smokeColors[0]);
+            } else {
+                DrawCircleLines(cx, cy, smokeRadius * 2.5f, smokeColors[0]);
+            }
+        }
+    }
+}
+
+
